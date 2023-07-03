@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "epee-encoding-derive"
+]
+
+[package]
+name = "epee-encoding"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+
+[features]
+default = ["derive"]
+derive = ["dep:epee-encoding-derive"]
+
+[dependencies]
+std-shims = {git = "https://github.com/serai-dex/serai.git", default-features = false}
+sealed = "0.5.0"
+epee-encoding-derive = {path="./epee-encoding-derive", optional=true}
+
+[dev-dependencies]
+hex = "0.4"
+epee-encoding-derive = {path = "./epee-encoding-derive"}
