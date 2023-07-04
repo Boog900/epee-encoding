@@ -6,25 +6,93 @@
 //! because that there is an [unfixable problem](https://github.com/monero-rs/monero-epee-bin-serde/issues/49)
 //! with using serde to encode in the Epee format.
 //!
-//! TODO: usage examples
+//! example without derive:
+//! ```rust
+//! use epee_encoding::{EpeeObject, EpeeObjectBuilder, read_epee_value, skip_epee_value, write_field, to_bytes, from_bytes};
+//! use epee_encoding::io::{Read, Write};
+//! use epee_encoding::varint::write_varint;
+//!
+//! pub struct Test {
+//!     val: u64
+//! }
+//!
+//! #[derive(Default)]
+//! pub struct __TestEpeeBuilder {
+//!     val: Option<u64>,
+//! }
+//!
+//! impl EpeeObjectBuilder<Test> for __TestEpeeBuilder {
+//!     fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<()> {
+//!         match name {
+//!             "val" => {self.val = Some(read_epee_value(r)?);}
+//!             _ => skip_epee_value(r)?,
+//!         }
+//!         Ok(())
+//!     }
+//!
+//!     fn finish(self) -> epee_encoding::error::Result<Test> {
+//!         Ok(
+//!             Test {
+//!                 val: self.val.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?
+//!             }
+//!         )
+//!     }
+//! }
+//!
+//! impl EpeeObject for Test {
+//!     type Builder = __TestEpeeBuilder;
+//!
+//!     fn write<W: Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
+//!        // write the number of fields
+//!        write_varint(1, w)?;
+//!        // write the fields
+//!        write_field(&self.val, "val", w)
+//!    }
+//! }
+//!
+//! fn main() {
+//!     let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
+//!     let val: Test = from_bytes(&data).unwrap();
+//!     let data = to_bytes(&val).unwrap();
+//! }
+//!
+//! ```
+//!
+//! example with derive:
+//! ```rust
+//!
+//! use epee_encoding::{EpeeObject, from_bytes, to_bytes};
+//!
+//! #[derive(EpeeObject)]
+//! pub struct Test {
+//!     val: u64
+//! }
+//!
+//! fn main() {
+//!     let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
+//!     let val: Test = from_bytes(&data).unwrap();
+//!     let data = to_bytes(&val).unwrap();
+//! }
+//! ```
+
 
 extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use std_shims::io;
-use std_shims::io::{ErrorKind, Read, Write};
-
+pub mod error;
+pub mod io;
 mod marker;
-mod serialize;
 mod value;
 pub mod varint;
+
 #[cfg(feature = "derive")]
 pub use epee_encoding_derive::EpeeObject;
 
+use error::*;
+use io::*;
 use marker::{InnerMarker, Marker};
-use serialize::{read_byte, read_bytes, read_string};
 use value::EpeeValue;
 use varint::*;
 
@@ -34,70 +102,77 @@ const HEADER: &[u8] = b"\x01\x11\x01\x01\x01\x01\x02\x01\x01";
 /// The maximum length a byte array (marked as a string) can be.
 const MAX_STRING_LEN_POSSIBLE: u64 = 2000000000;
 
+/// A trait for an object that can build a type `T` from the epee format.
 pub trait EpeeObjectBuilder<T>: Default + Sized {
-    fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> io::Result<()>;
+    /// Called when a field names has been read no other bytes following the field
+    /// name would have been read.
+    fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> Result<()>;
 
-    fn finish(self) -> io::Result<T>;
+    /// Called when the number of fields has been read.
+    fn finish(self) -> Result<T>;
 }
 
+/// A trait for an object that can be turned into epee bytes.
 pub trait EpeeObject: Sized {
     type Builder: EpeeObjectBuilder<Self>;
 
-    fn write<W: Write>(&self, w: &mut W) -> io::Result<()>;
+    /// write the object into the epee format.
+    fn write<W: Write>(&self, w: &mut W) -> Result<()>;
 }
 
-fn read_header<R: Read>(r: &mut R) -> io::Result<()> {
-    let mut buf = [0; 9];
-    r.read_exact(&mut buf)?;
-    if buf != HEADER {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            "Data does not contain header",
-        ));
-    }
-    Ok(())
-}
-
-fn write_header<W: Write>(w: &mut W) -> io::Result<()> {
-    w.write_all(HEADER)
-}
-
-pub fn from_bytes<T: EpeeObject>(mut buf: &[u8]) -> io::Result<T> {
+/// Read the object `T` from a byte array.
+pub fn from_bytes<T: EpeeObject>(mut buf: &[u8]) -> Result<T> {
     read_head_object(&mut buf)
 }
 
-pub fn to_bytes<T: EpeeObject>(val: &T) -> io::Result<Vec<u8>> {
+/// Turn the object into epee bytes.
+pub fn to_bytes<T: EpeeObject>(val: &T) -> Result<Vec<u8>> {
     let mut buf = Vec::<u8>::new();
     write_head_object(val, &mut buf)?;
     Ok(buf)
 }
 
-fn write_head_object<T: EpeeObject, W: Write>(val: &T, w: &mut W) -> io::Result<()> {
+fn read_header<R: Read>(r: &mut R) -> Result<()> {
+    let mut buf = [0; 9];
+    r.read_exact(&mut buf)?;
+    if buf != HEADER {
+        return Err(Error::Format("Data does not contain header"));
+    }
+    Ok(())
+}
+
+fn write_header<W: Write>(w: &mut W) -> Result<()> {
+    w.write_all(HEADER)
+}
+
+
+fn write_head_object<T: EpeeObject, W: Write>(val: &T, w: &mut W) -> Result<()> {
     write_header(w)?;
     val.write(w)
 }
 
-fn read_head_object<T: EpeeObject, R: Read>(r: &mut R) -> io::Result<T> {
+fn read_head_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
     read_header(r)?;
     read_object(r)
 }
 
-pub fn read_field_name<R: Read>(r: &mut R) -> io::Result<String> {
+fn read_field_name<R: Read>(r: &mut R) -> Result<String> {
     let len = read_byte(r)?;
     read_string(r, len.into())
 }
 
-pub fn write_field_name<W: Write>(val: &str, w: &mut W) -> io::Result<()> {
+fn write_field_name<W: Write>(val: &str, w: &mut W) -> Result<()> {
     w.write(&[val.len().try_into().unwrap()])?;
     w.write_all(val.as_bytes())
 }
 
-pub fn write_field<T: EpeeValue, W: Write>(val: &T, field_name: &str, w: &mut W) -> io::Result<()> {
+/// Write an epee field.
+pub fn write_field<T: EpeeValue, W: Write>(val: &T, field_name: &str, w: &mut W) -> Result<()> {
     write_field_name(field_name, w)?;
     write_epee_value(val, w)
 }
 
-pub fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> io::Result<T> {
+fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
     let mut object_builder = T::Builder::default();
 
     let number_o_field = read_varint(r)?;
@@ -111,22 +186,23 @@ pub fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> io::Result<T> {
     object_builder.finish()
 }
 
-pub fn read_marker<R: Read>(r: &mut R) -> io::Result<Marker> {
+fn read_marker<R: Read>(r: &mut R) -> Result<Marker> {
     Marker::try_from(read_byte(r)?)
 }
 
-pub fn read_epee_value<T: EpeeValue, R: Read>(r: &mut R) -> io::Result<T> {
+/// Read an epee value from the stream, an epee value is the part after the key
+/// including the marker.
+pub fn read_epee_value<T: EpeeValue, R: Read>(r: &mut R) -> Result<T> {
     if read_marker(r)? != T::MARKER {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            "Marker does match expected Marker",
-        ));
+        return Err(Error::Format("Marker does match expected Marker"));
     }
 
     T::read(r)
 }
 
-pub fn write_epee_value<T: EpeeValue, W: Write>(val: &T, w: &mut W) -> io::Result<()> {
+/// Write an epee value to the stream, an epee value is the part after the key
+/// including the marker.
+fn write_epee_value<T: EpeeValue, W: Write>(val: &T, w: &mut W) -> Result<()> {
     w.write_all(&[T::MARKER.as_u8()])?;
     val.write(w)
 }
@@ -136,11 +212,11 @@ pub fn write_epee_value<T: EpeeValue, W: Write>(val: &T, w: &mut W) -> io::Resul
 struct SkipObjectBuilder;
 
 impl EpeeObjectBuilder<SkipObject> for SkipObjectBuilder {
-    fn add_field<R: Read>(&mut self, _name: &str, r: &mut R) -> io::Result<()> {
+    fn add_field<R: Read>(&mut self, _name: &str, r: &mut R) -> Result<()> {
         skip_epee_value(r)
     }
 
-    fn finish(self) -> io::Result<SkipObject> {
+    fn finish(self) -> Result<SkipObject> {
         Ok(SkipObject)
     }
 }
@@ -151,12 +227,14 @@ struct SkipObject;
 impl EpeeObject for SkipObject {
     type Builder = SkipObjectBuilder;
 
-    fn write<W: Write>(&self, _w: &mut W) -> io::Result<()> {
+    fn write<W: Write>(&self, _w: &mut W) -> Result<()> {
         panic!("This is a helper function to use when de-serialising")
     }
 }
 
-pub fn skip_epee_value<R: Read>(r: &mut R) -> io::Result<()> {
+/// Skip an epee value, should be used when you do not need the value
+/// stored at a key.
+pub fn skip_epee_value<R: Read>(r: &mut R) -> Result<()> {
     let marker = read_marker(r)?;
     let mut len = 1;
     if marker.is_seq {

@@ -187,7 +187,7 @@ fn build_builder_impl(
 ) -> TokenStream {
     quote! {
         impl epee_encoding::EpeeObjectBuilder<#struct_name> for #builder_name {
-            fn add_field<R: std_shims::io::Read>(&mut self, name: &str, r: &mut R) -> std_shims::io::Result<()> {
+            fn add_field<R: epee_encoding::io::Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<()> {
                 match name {
                     #(#encoded_field_names => {let _ = self.#field_names.insert(epee_encoding::read_epee_value(r)?);},)*
                     _ => epee_encoding::skip_epee_value(r)?,
@@ -196,9 +196,9 @@ fn build_builder_impl(
                 Ok(())
             }
 
-            fn finish(self) -> std_shims::io::Result<#struct_name> {
+            fn finish(self) -> epee_encoding::error::Result<#struct_name> {
                 Ok(#struct_name {
-                    #(#field_names: self.#field_names.ok_or_else(|| std_shims::io::Error::new(std_shims::io::ErrorKind::Other, "Required field was not found!"))?),*
+                    #(#field_names: self.#field_names.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?),*
                 })
             }
         }
@@ -249,7 +249,7 @@ fn build_object_impl(
         impl EpeeObject for #struct_name {
             type Builder = #mod_name::#builder_name;
 
-            fn write<W: std_shims::io::Write>(&self, w: &mut W) -> std_shims::io::Result<()> {
+            fn write<W: epee_encoding::io::Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
                 let mut numb_o_fields: u64 = #numb_o_fields;
 
                 #handle_defaults

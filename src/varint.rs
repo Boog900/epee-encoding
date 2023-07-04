@@ -1,8 +1,8 @@
-use std_shims::io;
 
-use crate::serialize::*;
+use crate::error::*;
+use crate::io::*;
 
-pub fn read_varint<R: io::Read>(reader: &mut R) -> io::Result<u64> {
+pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64> {
     let vi_start = read_byte(reader)?;
     let len = match vi_start & 0b11 {
         0 => 1,
@@ -18,7 +18,7 @@ pub fn read_varint<R: io::Read>(reader: &mut R) -> io::Result<u64> {
     Ok(vi)
 }
 
-pub fn write_varint<W: io::Write>(number: u64, writer: &mut W) -> io::Result<()> {
+pub fn write_varint<W: Write>(number: u64, writer: &mut W) -> Result<()> {
     let size_marker = match number {
         ..=63 => 0,
         64..=16383 => 1,

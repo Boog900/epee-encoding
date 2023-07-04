@@ -29,3 +29,14 @@ fn decode() {
 
     assert_eq!(ty, from_bytes(&bytes).unwrap());
 }
+
+#[derive(EpeeObject)]
+struct Test {
+    val: u64,
+}
+
+#[test]
+fn t() {
+    let val = Test{val: 4};
+    println!("{:?}",to_bytes(&val).unwrap());
+}

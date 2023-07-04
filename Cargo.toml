@@ -15,7 +15,6 @@ default = ["derive"]
 derive = ["dep:epee-encoding-derive"]
 
 [dependencies]
-std-shims = {git = "https://github.com/serai-dex/serai.git", default-features = false}
 sealed = "0.5.0"
 epee-encoding-derive = {path="./epee-encoding-derive", optional=true}
 

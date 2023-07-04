@@ -1,6 +1,5 @@
 /// This module contains a [`Marker`] which is appended before each value to tell you the type.
-use std_shims::io;
-use std_shims::io::ErrorKind;
+use crate::Error;
 
 /// The inner marker just telling you the type.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -76,7 +75,7 @@ impl Marker {
 }
 
 impl TryFrom<u8> for Marker {
-    type Error = io::Error;
+    type Error = Error;
 
     fn try_from(mut value: u8) -> Result<Self, Self::Error> {
         let is_seq = value & 0x80 > 0;
@@ -98,7 +97,7 @@ impl TryFrom<u8> for Marker {
             10 => InnerMarker::String,
             11 => InnerMarker::Bool,
             12 => InnerMarker::Object,
-            _ => return Err(io::Error::new(ErrorKind::Other, "Unknown value Marker")),
+            _ => return Err(Error::Format("Unknown value Marker")),
         };
 
         Ok(Marker {
