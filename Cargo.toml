@@ -25,4 +25,3 @@ epee-encoding-derive = {path="./epee-encoding-derive", optional=true}
 
 [dev-dependencies]
 hex = "0.4"
-epee-encoding-derive = {path = "./epee-encoding-derive"}

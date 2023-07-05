@@ -1,6 +1,11 @@
 use crate::error::*;
 use crate::io::*;
 
+const SIZE_OF_SIZE_MARKER: u32 = 2;
+const FITS_IN_ONE_BYTE: u64 = 2_u64.pow(8 - SIZE_OF_SIZE_MARKER) - 1;
+const FITS_IN_TWO_BYTES: u64 = 2_u64.pow(16 - SIZE_OF_SIZE_MARKER) - 1;
+const FITS_IN_FOUR_BYTES: u64 = 2_u64.pow(32 - SIZE_OF_SIZE_MARKER) - 1;
+
 pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64> {
     let vi_start = read_byte(reader)?;
     let len = match vi_start & 0b11 {
@@ -18,10 +23,11 @@ pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64> {
 }
 
 pub fn write_varint<W: Write>(number: u64, writer: &mut W) -> Result<()> {
+    #[allow(clippy::match_overlapping_arm)]
     let size_marker = match number {
-        ..=63 => 0,
-        64..=16383 => 1,
-        16384..=1073741823 => 2,
+        ..=FITS_IN_ONE_BYTE => 0,
+        ..=FITS_IN_TWO_BYTES => 1,
+        ..=FITS_IN_FOUR_BYTES => 2,
         _ => 3,
     };
 
@@ -37,7 +43,40 @@ pub fn write_varint<W: Write>(number: u64, writer: &mut W) -> Result<()> {
     }
 }
 
-#[test]
-fn test_varint() {
-    let _buf = [(64 << 2)];
+#[cfg(test)]
+mod tests {
+
+    use alloc::vec::Vec;
+
+    use crate::varint::*;
+
+    fn assert_varint_length(number: u64, len: usize) {
+        let mut w = Vec::new();
+        write_varint(number, &mut w).unwrap();
+        assert_eq!(w.len(), len);
+    }
+
+    fn assert_varint_val(mut varint: &[u8], val: u64) {
+        assert_eq!(read_varint(&mut varint).unwrap(), val);
+    }
+
+    #[test]
+    fn varint_write_length() {
+        assert_varint_length(FITS_IN_ONE_BYTE, 1);
+        assert_varint_length(FITS_IN_ONE_BYTE + 1, 2);
+        assert_varint_length(FITS_IN_TWO_BYTES, 2);
+        assert_varint_length(FITS_IN_TWO_BYTES + 1, 4);
+        assert_varint_length(FITS_IN_FOUR_BYTES, 4);
+        assert_varint_length(FITS_IN_FOUR_BYTES + 1, 8);
+    }
+
+    #[test]
+    fn varint_read() {
+        assert_varint_val(&[252], FITS_IN_ONE_BYTE);
+        assert_varint_val(&[1, 1], FITS_IN_ONE_BYTE + 1);
+        assert_varint_val(&[253, 255], FITS_IN_TWO_BYTES);
+        assert_varint_val(&[2, 0, 1, 0], FITS_IN_TWO_BYTES + 1);
+        assert_varint_val(&[254, 255, 255, 255], FITS_IN_FOUR_BYTES);
+        assert_varint_val(&[3, 0, 0, 0, 1, 0, 0, 0], FITS_IN_FOUR_BYTES + 1);
+    }
 }

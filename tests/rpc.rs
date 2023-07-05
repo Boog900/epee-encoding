@@ -38,16 +38,3 @@ fn rpc_get_outs_response() {
 
     assert_eq!(val, from_bytes(&bytes).unwrap());
 }
-
-
-
-#[derive(EpeeObject)]
-struct Test2 {
-    val: u64
-}
-
-fn main() {
-    let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
-    let val: Test2 = from_bytes(&data).unwrap();
-    let data = to_bytes(&val).unwrap();
-}

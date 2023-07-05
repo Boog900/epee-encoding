@@ -60,7 +60,7 @@
 //! ```
 //!
 //! example with derive:
-//! ```rust
+//! ```ignore
 //! use epee_encoding::{EpeeObject, from_bytes, to_bytes};
 //!
 //! #[derive(EpeeObject)]
