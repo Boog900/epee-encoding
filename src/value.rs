@@ -1,6 +1,8 @@
-use alloc::vec::Vec;
 /// This module contains a `sealed` [`EpeeValue`] trait and different impls for
 /// the different possible base epee values.
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use sealed::sealed;
 
 use crate::io::*;
@@ -115,6 +117,27 @@ impl EpeeValue for Vec<u8> {
 }
 
 #[sealed]
+impl EpeeValue for String {
+    const MARKER: Marker = Marker {
+        inner_marker: InnerMarker::String,
+        is_seq: false,
+    };
+
+    fn read<R: Read>(r: &mut R) -> Result<Self> {
+        let len = read_varint(r)?;
+        if len > MAX_STRING_LEN_POSSIBLE {
+            return Err(Error::Format("Byte array exceeded max length"));
+        }
+
+        read_string(r, len.try_into().unwrap())
+    }
+
+    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+        w.write_all(self.as_bytes())
+    }
+}
+
+#[sealed]
 impl<const N: usize> EpeeValue for [u8; N] {
     const MARKER: Marker = Marker::new(InnerMarker::String);
 
@@ -169,6 +192,8 @@ epee_seq!(u32);
 epee_seq!(u16);
 epee_seq!(f64);
 epee_seq!(bool);
+epee_seq!(Vec<u8>);
+epee_seq!(String);
 
 #[test]
 fn t() {}

@@ -17,8 +17,8 @@ impl Error {
 
     fn field_data(&self) -> &'static str {
         match self {
-            Error::IO(data) => *data,
-            Error::Format(data) => *data,
+            Error::IO(data) => data,
+            Error::Format(data) => data,
         }
     }
 }

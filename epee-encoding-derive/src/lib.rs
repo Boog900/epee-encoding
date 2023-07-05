@@ -3,17 +3,15 @@
 extern crate alloc;
 
 use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
+use alloc::string::ToString;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{
-    parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Expr, Field, GenericParam,
-    Generics, Lit, Type,
+    parse_macro_input, parse_quote, Data, DeriveInput, Expr, Fields, GenericParam, Generics, Lit,
 };
 
-#[proc_macro_derive(EpeeObject, attributes(epee_default, epee_alt_name))]
+#[proc_macro_derive(EpeeObject, attributes(epee_default, epee_alt_name, epee_flatten))]
 pub fn derive_epee_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input tokens into a syntax tree.
     let input = parse_macro_input!(input as DeriveInput);
@@ -24,7 +22,7 @@ pub fn derive_epee_object(input: proc_macro::TokenStream) -> proc_macro::TokenSt
     let (_impl_generics, _ty_generics, _where_clause) = generics.split_for_impl();
 
     let output = match input.data {
-        Data::Struct(data) => derive_object(&data, &struct_name),
+        Data::Struct(data) => build(&data.fields, &struct_name),
         _ => panic!("Only structs can be epee objects"),
     };
 
@@ -42,224 +40,220 @@ fn add_trait_bounds(mut generics: Generics) -> Generics {
     generics
 }
 
-fn derive_object(data: &DataStruct, struct_name: &Ident) -> TokenStream {
-    let field_info = data
-        .fields
-        .iter()
-        .map(|field| get_field_data(field))
-        .collect::<Vec<_>>();
-    let field_names = field_info
-        .iter()
-        .map(|field_info| field_info.0.clone())
-        .collect::<Vec<_>>();
-    let field_types = field_info
-        .iter()
-        .map(|field_info| field_info.1.clone())
-        .collect::<Vec<_>>();
-    let field_default_val = field_info
-        .iter()
-        .map(|field_info| field_info.2.clone())
-        .collect::<Vec<_>>();
-    let field_alt_names = field_info
-        .iter()
-        .map(|field_info| field_info.3.clone())
-        .collect::<Vec<_>>();
+fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
+    let mut struct_fields = TokenStream::new();
+    let mut default_values = TokenStream::new();
+    let mut count_fields = TokenStream::new();
+    let mut write_fields = TokenStream::new();
 
-    let encoded_field_names = field_names
-        .iter()
-        .zip(field_alt_names)
-        .map(|(name, alt)| {
-            if let Some(alt) = alt {
-                match alt {
-                    Lit::Str(name) => name.value(),
-                    _ => panic!("Alt name was not a string"),
-                }
-            } else {
-                name.to_string()
+    let mut read_match_body = TokenStream::new();
+    let mut read_catch_all = TokenStream::new();
+
+    let mut object_finish = TokenStream::new();
+
+    let numb_o_fields: u64 = fields.len().try_into().unwrap();
+
+    for field in fields {
+        let field_name = field.ident.clone().unwrap();
+        let field_type = &field.ty;
+        // If this field has a default value find it
+        let default_val: Option<Expr> = field
+            .attrs
+            .iter()
+            .find(|f| f.path().is_ident("epee_default"))
+            .map(|f| f.parse_args().unwrap());
+        // If this field has a different name when encoded find it
+        let alt_name: Option<Lit> = field
+            .attrs
+            .iter()
+            .find(|f| f.path().is_ident("epee_alt_name"))
+            .map(|f| f.parse_args().unwrap());
+
+        let is_flattened = field
+            .attrs
+            .iter()
+            .any(|f| f.path().is_ident("epee_flatten"));
+
+        // Gets this objects epee name, the name its encoded with
+        let epee_name = if let Some(alt) = alt_name {
+            if is_flattened {
+                panic!("Cant rename a flattened field")
             }
-        })
-        .collect::<Vec<_>>();
-
-    let builder_name = Ident::new(
-        &format!("__{}EpeeBuilder", struct_name.to_string()),
-        Span::call_site(),
-    );
-
-    let builder_struct = build_builder_struct(&builder_name, &field_names, &field_types);
-    let default_builder_impl = build_default_impl(&builder_name, &field_names, &field_default_val);
-    let builder_impl = build_builder_impl(
-        &struct_name,
-        &builder_name,
-        &field_names,
-        &encoded_field_names,
-    );
-
-    let mod_name = Ident::new(&format!("__epee{}", struct_name), Span::call_site());
-    let object_impl = build_object_impl(
-        &struct_name,
-        &mod_name,
-        &builder_name,
-        &field_names,
-        &field_default_val,
-        &encoded_field_names,
-    );
-
-    quote! {
-        mod #mod_name {
-            use super::*;
-            #builder_struct
-
-            #default_builder_impl
-
-            #builder_impl
-        }
-
-        #object_impl
-    }
-}
-
-fn get_field_data(field: &Field) -> (Ident, &Type, Option<Expr>, Option<Lit>) {
-    let ident = field.ident.clone().unwrap();
-    let ty = &field.ty;
-    // If this field has a default value find it
-    let default_val: Option<Expr> = field
-        .attrs
-        .iter()
-        .find(|f| f.path().is_ident("epee_default"))
-        .map(|f| f.parse_args().unwrap());
-    // If this field has a different name when encoded find it
-    let alt_name: Option<Lit> = field
-        .attrs
-        .iter()
-        .find(|f| f.path().is_ident("epee_alt_name"))
-        .map(|f| f.parse_args().unwrap());
-
-    (ident, ty, default_val, alt_name)
-}
-
-fn build_builder_struct(
-    builder_name: &Ident,
-    field_names: &[Ident],
-    field_types: &[Type],
-) -> TokenStream {
-    quote! {
-        pub struct #builder_name {
-            #(#field_names: Option<#field_types>),*
-        }
-    }
-}
-
-fn build_default_impl(
-    struct_name: &Ident,
-    field_names: &[Ident],
-    field_default_vals: &[Option<Expr>],
-) -> TokenStream {
-    let mut values = TokenStream::new();
-    for (default_val, name) in field_default_vals.iter().zip(field_names) {
-        if let Some(default_val) = default_val {
-            values = quote! {
-                #values
-                #name: Some(#default_val),
+            match alt {
+                Lit::Str(name) => name.value(),
+                _ => panic!("Alt name was not a string"),
             }
         } else {
-            values = quote! {
-                #values
-                #name: None,
-            }
+            field_name.to_string()
+        };
+
+        // This is fields part of a struct:
+        // struct T {
+        //  #struct_fields
+        // }
+        if is_flattened {
+            struct_fields = quote! {
+                #struct_fields
+                #field_name: <#field_type as epee_encoding::EpeeObject>::Builder,
+            };
+        } else {
+            struct_fields = quote! {
+                #struct_fields
+                #field_name: Option<#field_type>,
+            };
         }
-    }
-    quote! {
-        impl Default for #struct_name {
-            fn default() -> Self {
-                #struct_name {
-                    #values
-                }
-            }
-        }
-    }
-}
 
-fn build_builder_impl(
-    struct_name: &Ident,
-    builder_name: &Ident,
-    field_names: &[Ident],
-    encoded_field_names: &[String],
-) -> TokenStream {
-    quote! {
-        impl epee_encoding::EpeeObjectBuilder<#struct_name> for #builder_name {
-            fn add_field<R: epee_encoding::io::Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<()> {
-                match name {
-                    #(#encoded_field_names => {let _ = self.#field_names.insert(epee_encoding::read_epee_value(r)?);},)*
-                    _ => epee_encoding::skip_epee_value(r)?,
-                };
+        // `default_val`: this is the body of a default function:
+        // fn default() -> Self {
+        //    Self {
+        //       #default_values
+        //    }
+        // }
 
-                Ok(())
-            }
+        // `count_fields`: this is the part of the write function that takes
+        // away from the number of fields if the field is the default value.
 
-            fn finish(self) -> epee_encoding::error::Result<#struct_name> {
-                Ok(#struct_name {
-                    #(#field_names: self.#field_names.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?),*
-                })
-            }
-        }
-    }
-}
-
-fn build_object_impl(
-    struct_name: &Ident,
-    mod_name: &Ident,
-    builder_name: &Ident,
-    field_names: &[Ident],
-    field_default_vals: &[Option<Expr>],
-    encoded_field_names: &[String],
-) -> TokenStream {
-    let mut handle_defaults = TokenStream::new();
-
-    let mut encode_fields = TokenStream::new();
-
-    let numb_o_fields: u64 = field_names.len().try_into().unwrap();
-
-    for ((field_name, encoded_field_name), default_val) in field_names
-        .iter()
-        .zip(encoded_field_names)
-        .zip(field_default_vals)
-    {
+        // `write_fields`: this is the part of the write function that writes
+        // this specific epee field.
         if let Some(default_val) = default_val {
-            handle_defaults = quote! {
-                #handle_defaults
+            if is_flattened {
+                panic!("Cant have a default on a flattened field");
+            };
+
+            default_values = quote! {
+                #default_values
+                #field_name: Some(#default_val),
+            };
+
+            count_fields = quote! {
+                #count_fields
                 if self.#field_name == #default_val {
                     numb_o_fields -= 1;
                 };
             };
-            encode_fields = quote! {
-                #encode_fields
+
+            write_fields = quote! {
+                #write_fields
                 if self.#field_name != #default_val {
-                    epee_encoding::write_field(&self.#field_name, &#encoded_field_name, w)?;
-                };
+                    epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
+                }
             }
         } else {
-            encode_fields = quote! {
-                #encode_fields
-                epee_encoding::write_field(&self.#field_name, &#encoded_field_name, w)?;
+            if !is_flattened {
+                default_values = quote! {
+                    #default_values
+                    #field_name: None,
+                };
+            } else {
+                default_values = quote! {
+                    #default_values
+                    #field_name: Default::default(),
+                }
             }
+
+            write_fields = quote! {
+                #write_fields
+                epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
+            };
+        };
+
+        // This is what these values do:
+        // fn add_field(name: &str, r: &mut r) -> Result<bool> {
+        //    match name {
+        //        #read_match_body
+        //        _ => {
+        //           #read_catch_all
+        //           return Ok(false);
+        //         }
+        //    }
+        //    Ok(true)
+        // }
+        if is_flattened {
+            read_catch_all = quote! {
+                #read_catch_all
+                if self.#field_name.add_field(name, r)? {
+                    return Ok(true);
+                };
+            };
+
+            object_finish = quote! {
+                #object_finish
+                #field_name: self.#field_name.finish()?,
+            };
+        } else {
+            read_match_body = quote! {
+                #read_match_body
+                #epee_name => {self.#field_name = Some(epee_encoding::read_epee_value(r)?);},
+            };
+
+            object_finish = quote! {
+                #object_finish
+                #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?,
+            };
         }
     }
 
-    quote! {
+    let builder_name = Ident::new(&format!("__{}EpeeBuilder", struct_name), Span::call_site());
+    let mod_name = Ident::new(&format!("__{}_epee_module", struct_name), Span::call_site());
+
+    let builder_impl = quote! {
+        pub struct #builder_name {
+            #struct_fields
+        }
+
+        impl Default for #builder_name {
+            fn default() -> Self {
+                Self {
+                    #default_values
+                }
+            }
+        }
+
+        impl epee_encoding::EpeeObjectBuilder<#struct_name> for #builder_name {
+            fn add_field<R: epee_encoding::io::Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<bool> {
+                match name {
+                    #read_match_body
+                    _ => {
+                        #read_catch_all
+                        return Ok(false);
+                    }
+                };
+
+                Ok(true)
+            }
+
+            fn finish(self) -> epee_encoding::error::Result<#struct_name> {
+                Ok(#struct_name {
+                    #object_finish
+                })
+            }
+        }
+    };
+
+    let object_impl = quote! {
         impl EpeeObject for #struct_name {
             type Builder = #mod_name::#builder_name;
 
             fn write<W: epee_encoding::io::Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
                 let mut numb_o_fields: u64 = #numb_o_fields;
 
-                #handle_defaults
+                #count_fields
 
                 epee_encoding::varint::write_varint(numb_o_fields, w)?;
 
-                #encode_fields
+                #write_fields
 
                 Ok(())
             }
         }
+    };
+
+    quote! {
+        mod #mod_name {
+            use super::*;
+            #builder_impl
+        }
+
+        #object_impl
     }
 }

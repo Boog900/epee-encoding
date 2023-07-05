@@ -8,7 +8,7 @@
 //!
 //! example without derive:
 //! ```rust
-//! use epee_encoding::{EpeeObject, EpeeObjectBuilder, read_epee_value, skip_epee_value, write_field, to_bytes, from_bytes};
+//! use epee_encoding::{EpeeObject, EpeeObjectBuilder, read_epee_value, write_field, to_bytes, from_bytes};
 //! use epee_encoding::io::{Read, Write};
 //! use epee_encoding::varint::write_varint;
 //!
@@ -22,12 +22,12 @@
 //! }
 //!
 //! impl EpeeObjectBuilder<Test> for __TestEpeeBuilder {
-//!     fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<()> {
+//!     fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> epee_encoding::error::Result<bool> {
 //!         match name {
 //!             "val" => {self.val = Some(read_epee_value(r)?);}
-//!             _ => skip_epee_value(r)?,
+//!             _ => return Ok(false),
 //!         }
-//!         Ok(())
+//!         Ok(true)
 //!     }
 //!
 //!     fn finish(self) -> epee_encoding::error::Result<Test> {
@@ -50,31 +50,29 @@
 //!    }
 //! }
 //!
-//! fn main() {
-//!     let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
-//!     let val: Test = from_bytes(&data).unwrap();
-//!     let data = to_bytes(&val).unwrap();
-//! }
+//!
+//! let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
+//! let val: Test = from_bytes(&data).unwrap();
+//! let data = to_bytes(&val).unwrap();
+//!
 //!
 //! ```
 //!
 //! example with derive:
 //! ```rust
-//!
 //! use epee_encoding::{EpeeObject, from_bytes, to_bytes};
 //!
 //! #[derive(EpeeObject)]
-//! pub struct Test {
+//! struct Test {
 //!     val: u64
 //! }
 //!
-//! fn main() {
-//!     let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
-//!     let val: Test = from_bytes(&data).unwrap();
-//!     let data = to_bytes(&val).unwrap();
-//! }
+//!
+//! let data = [1, 17, 1, 1, 1, 1, 2, 1, 1, 4, 3, 118, 97, 108, 5, 4, 0, 0, 0, 0, 0, 0, 0]; // the data to decode;
+//! let val: Test = from_bytes(&data).unwrap();
+//! let data = to_bytes(&val).unwrap();
+//!
 //! ```
-
 
 extern crate alloc;
 
@@ -105,8 +103,11 @@ const MAX_STRING_LEN_POSSIBLE: u64 = 2000000000;
 /// A trait for an object that can build a type `T` from the epee format.
 pub trait EpeeObjectBuilder<T>: Default + Sized {
     /// Called when a field names has been read no other bytes following the field
-    /// name would have been read.
-    fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> Result<()>;
+    /// name will have been read.
+    ///
+    /// Returns a bool if true then the field has been read otherwise the field is not
+    /// needed and has not been read.
+    fn add_field<R: Read>(&mut self, name: &str, r: &mut R) -> Result<bool>;
 
     /// Called when the number of fields has been read.
     fn finish(self) -> Result<T>;
@@ -145,7 +146,6 @@ fn write_header<W: Write>(w: &mut W) -> Result<()> {
     w.write_all(HEADER)
 }
 
-
 fn write_head_object<T: EpeeObject, W: Write>(val: &T, w: &mut W) -> Result<()> {
     write_header(w)?;
     val.write(w)
@@ -181,7 +181,9 @@ fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
     for _ in 0..number_o_field {
         let field_name = read_field_name(r)?;
 
-        object_builder.add_field(&field_name, r)?;
+        if !object_builder.add_field(&field_name, r)? {
+            skip_epee_value(r)?;
+        }
     }
     object_builder.finish()
 }
@@ -212,8 +214,8 @@ fn write_epee_value<T: EpeeValue, W: Write>(val: &T, w: &mut W) -> Result<()> {
 struct SkipObjectBuilder;
 
 impl EpeeObjectBuilder<SkipObject> for SkipObjectBuilder {
-    fn add_field<R: Read>(&mut self, _name: &str, r: &mut R) -> Result<()> {
-        skip_epee_value(r)
+    fn add_field<R: Read>(&mut self, _name: &str, _r: &mut R) -> Result<bool> {
+        Ok(false)
     }
 
     fn finish(self) -> Result<SkipObject> {
@@ -234,7 +236,7 @@ impl EpeeObject for SkipObject {
 
 /// Skip an epee value, should be used when you do not need the value
 /// stored at a key.
-pub fn skip_epee_value<R: Read>(r: &mut R) -> Result<()> {
+fn skip_epee_value<R: Read>(r: &mut R) -> Result<()> {
     let marker = read_marker(r)?;
     let mut len = 1;
     if marker.is_seq {
