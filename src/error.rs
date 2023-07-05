@@ -22,7 +22,7 @@ impl Error {
         match self {
             Error::IO(data) => data,
             Error::Format(data) => data,
-            Error::Value(data) => *data
+            Error::Value(data) => data,
         }
     }
 }

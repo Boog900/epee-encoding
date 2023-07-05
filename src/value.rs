@@ -26,7 +26,8 @@ impl<T: EpeeObject> EpeeValue for T {
     const MARKER: Marker = Marker::new(InnerMarker::Object);
 
     fn read<R: Read>(r: &mut R) -> Result<Self> {
-        crate::read_object(r)
+        let mut skipped_objects = 0;
+        crate::read_object(r, &mut skipped_objects)
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {

@@ -100,6 +100,8 @@ use varint::*;
 const HEADER: &[u8] = b"\x01\x11\x01\x01\x01\x01\x02\x01\x01";
 /// The maximum length a byte array (marked as a string) can be.
 const MAX_STRING_LEN_POSSIBLE: u64 = 2000000000;
+/// The maximum depth of skipped objects.
+const MAX_DEPTH_OF_SKIPPED_OBJECTS: u8 = 20;
 
 /// A trait for an object that can build a type `T` from the epee format.
 pub trait EpeeObjectBuilder<T>: Default + Sized {
@@ -157,7 +159,8 @@ fn write_head_object<T: EpeeObject, W: Write>(val: &T, w: &mut W) -> Result<()> 
 
 fn read_head_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
     read_header(r)?;
-    read_object(r)
+    let mut skipped_objects = 0;
+    read_object(r, &mut skipped_objects)
 }
 
 fn read_field_name<R: Read>(r: &mut R) -> Result<String> {
@@ -176,7 +179,7 @@ pub fn write_field<T: EpeeValue, W: Write>(val: &T, field_name: &str, w: &mut W)
     write_epee_value(val, w)
 }
 
-fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
+fn read_object<T: EpeeObject, R: Read>(r: &mut R, skipped_objects: &mut u8) -> Result<T> {
     let mut object_builder = T::Builder::default();
 
     let number_o_field = read_varint(r)?;
@@ -186,7 +189,7 @@ fn read_object<T: EpeeObject, R: Read>(r: &mut R) -> Result<T> {
         let field_name = read_field_name(r)?;
 
         if !object_builder.add_field(&field_name, r)? {
-            skip_epee_value(r)?;
+            skip_epee_value(r, skipped_objects)?;
         }
     }
     object_builder.finish()
@@ -244,7 +247,7 @@ impl EpeeObject for SkipObject {
 
 /// Skip an epee value, should be used when you do not need the value
 /// stored at a key.
-fn skip_epee_value<R: Read>(r: &mut R) -> Result<()> {
+fn skip_epee_value<R: Read>(r: &mut R, skipped_objects: &mut u8) -> Result<()> {
     let marker = read_marker(r)?;
     let mut len = 1;
     if marker.is_seq {
@@ -268,7 +271,12 @@ fn skip_epee_value<R: Read>(r: &mut R) -> Result<()> {
                 Vec::<u8>::read(r)?;
             }
             InnerMarker::Object => {
-                read_object::<SkipObject, _>(r)?;
+                *skipped_objects += 1;
+                if *skipped_objects > MAX_DEPTH_OF_SKIPPED_OBJECTS {
+                    return Err(Error::Format("Depth of skipped objects exceeded maximum"));
+                }
+                read_object::<SkipObject, _>(r, skipped_objects)?;
+                *skipped_objects -= 1;
             }
         };
     }
