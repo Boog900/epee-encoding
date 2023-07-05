@@ -41,8 +41,8 @@ impl<T: EpeeObject> EpeeValue for Vec<T> {
 
     fn read<R: Read>(r: &mut R) -> Result<Self> {
         let len = read_varint(r)?;
-        // TODO: check length
-        let mut res = Vec::with_capacity(len.try_into().unwrap());
+
+        let mut res = Vec::with_capacity(len.try_into()?);
         for _ in 0..len {
             res.push(T::read(r)?);
         }
@@ -50,7 +50,7 @@ impl<T: EpeeObject> EpeeValue for Vec<T> {
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        write_varint(self.len().try_into().unwrap(), w)?;
+        write_varint(self.len().try_into()?, w)?;
         for item in self.iter() {
             item.write(w)?;
         }
@@ -108,11 +108,11 @@ impl EpeeValue for Vec<u8> {
             return Err(Error::Format("Byte array exceeded max length"));
         }
 
-        read_var_bytes(r, len.try_into().unwrap())
+        read_var_bytes(r, len.try_into()?)
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        write_varint(self.len().try_into().unwrap(), w)?;
+        write_varint(self.len().try_into()?, w)?;
         w.write_all(self)
     }
 }
@@ -130,11 +130,11 @@ impl EpeeValue for String {
             return Err(Error::Format("Byte array exceeded max length"));
         }
 
-        read_string(r, len.try_into().unwrap())
+        read_string(r, len.try_into()?)
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        write_varint(self.len().try_into().unwrap(), w)?;
+        write_varint(self.len().try_into()?, w)?;
         w.write_all(self.as_bytes())
     }
 }
@@ -145,7 +145,7 @@ impl<const N: usize> EpeeValue for [u8; N] {
 
     fn read<R: Read>(r: &mut R) -> Result<Self> {
         let len = read_varint(r)?;
-        if len != N.try_into().unwrap() {
+        if len != N.try_into()? {
             return Err(Error::Format("Byte array has incorrect length"));
         }
 
@@ -153,7 +153,7 @@ impl<const N: usize> EpeeValue for [u8; N] {
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        write_varint(self.len().try_into().unwrap(), w)?;
+        write_varint(self.len().try_into()?, w)?;
         w.write_all(self)
     }
 }
@@ -166,8 +166,8 @@ macro_rules! epee_seq {
 
             fn read<R: Read>(r: &mut R) -> Result<Self> {
                 let len = read_varint(r)?;
-                //TODO: SIZE CHECK
-                let mut res = Vec::with_capacity(len.try_into().unwrap());
+
+                let mut res = Vec::with_capacity(len.try_into()?);
                 for _ in 0..len {
                     res.push(<$val>::read(r)?);
                 }
@@ -175,7 +175,7 @@ macro_rules! epee_seq {
             }
 
             fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-                write_varint(self.len().try_into().unwrap(), w)?;
+                write_varint(self.len().try_into()?, w)?;
                 for item in self.iter() {
                     item.write(w)?;
                 }

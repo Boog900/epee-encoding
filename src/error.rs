@@ -1,10 +1,12 @@
 use core::fmt::{Debug, Formatter};
+use core::num::TryFromIntError;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub enum Error {
     IO(&'static str),
     Format(&'static str),
+    Value(&'static str),
 }
 
 impl Error {
@@ -12,6 +14,7 @@ impl Error {
         match self {
             Error::IO(_) => "io",
             Error::Format(_) => "format",
+            Error::Value(_) => "value",
         }
     }
 
@@ -19,6 +22,7 @@ impl Error {
         match self {
             Error::IO(data) => data,
             Error::Format(data) => data,
+            Error::Value(data) => *data
         }
     }
 }
@@ -28,5 +32,11 @@ impl Debug for Error {
         f.debug_struct("Error")
             .field(self.field_name(), &self.field_data())
             .finish()
+    }
+}
+
+impl From<TryFromIntError> for Error {
+    fn from(_: TryFromIntError) -> Self {
+        Error::Value("Int is too large")
     }
 }

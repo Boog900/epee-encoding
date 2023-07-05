@@ -166,7 +166,7 @@ fn read_field_name<R: Read>(r: &mut R) -> Result<String> {
 }
 
 fn write_field_name<W: Write>(val: &str, w: &mut W) -> Result<()> {
-    w.write(&[val.len().try_into().unwrap()])?;
+    w.write(&[val.len().try_into()?])?;
     w.write_all(val.as_bytes())
 }
 
