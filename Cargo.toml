@@ -8,6 +8,10 @@ name = "epee-encoding"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+authors = ["Boog900"]
+readme = "README.md"
+description = "Epee binary format library."
+repository = "https://github.com/Boog900/epee-encoding"
 
 
 [features]

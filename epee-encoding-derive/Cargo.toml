@@ -3,6 +3,10 @@ name = "epee-encoding-derive"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+authors = ["Boog900"]
+readme = "README.md"
+description = "Epee binary format derive library."
+repository = "https://github.com/Boog900/epee-encoding"
 
 [lib]
 proc-macro = true
