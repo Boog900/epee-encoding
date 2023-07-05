@@ -10,6 +10,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Boog900"]
 readme = "README.md"
+keywords = ["monero", "epee", "no-std"]
 description = "Epee binary format library."
 repository = "https://github.com/Boog900/epee-encoding"
 
