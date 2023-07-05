@@ -23,11 +23,10 @@ pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64> {
 }
 
 pub fn write_varint<W: Write>(number: u64, writer: &mut W) -> Result<()> {
-    #[allow(clippy::match_overlapping_arm)]
     let size_marker = match number {
-        ..=FITS_IN_ONE_BYTE => 0,
-        ..=FITS_IN_TWO_BYTES => 1,
-        ..=FITS_IN_FOUR_BYTES => 2,
+        0..=FITS_IN_ONE_BYTE => 0,
+        64..=FITS_IN_TWO_BYTES => 1,
+        16384..=FITS_IN_FOUR_BYTES => 2,
         _ => 3,
     };
 
