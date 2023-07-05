@@ -10,7 +10,6 @@
 //! ```rust
 //! use epee_encoding::{EpeeObject, EpeeObjectBuilder, read_epee_value, write_field, to_bytes, from_bytes};
 //! use epee_encoding::io::{Read, Write};
-//! use epee_encoding::varint::write_varint;
 //!
 //! pub struct Test {
 //!     val: u64
@@ -42,9 +41,11 @@
 //! impl EpeeObject for Test {
 //!     type Builder = __TestEpeeBuilder;
 //!
-//!     fn write<W: Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
-//!        // write the number of fields
-//!        write_varint(1, w)?;
+//!     fn number_of_fields(&self) -> u64 {
+//!         1
+//!     }
+//!
+//!     fn write_fields<W: Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
 //!        // write the fields
 //!        write_field(&self.val, "val", w)
 //!    }
@@ -83,7 +84,7 @@ pub mod error;
 pub mod io;
 mod marker;
 mod value;
-pub mod varint;
+mod varint;
 
 #[cfg(feature = "derive")]
 pub use epee_encoding_derive::EpeeObject;
@@ -117,8 +118,11 @@ pub trait EpeeObjectBuilder<T>: Default + Sized {
 pub trait EpeeObject: Sized {
     type Builder: EpeeObjectBuilder<Self>;
 
-    /// write the object into the epee format.
-    fn write<W: Write>(&self, w: &mut W) -> Result<()>;
+    /// Returns the number of fields to be encoded.
+    fn number_of_fields(&self) -> u64;
+
+    /// write the objects fields into the writer.
+    fn write_fields<W: Write>(&self, w: &mut W) -> Result<()>;
 }
 
 /// Read the object `T` from a byte array.
@@ -229,7 +233,11 @@ struct SkipObject;
 impl EpeeObject for SkipObject {
     type Builder = SkipObjectBuilder;
 
-    fn write<W: Write>(&self, _w: &mut W) -> Result<()> {
+    fn number_of_fields(&self) -> u64 {
+        panic!("This is a helper function to use when de-serialising")
+    }
+
+    fn write_fields<W: Write>(&self, _w: &mut W) -> Result<()> {
         panic!("This is a helper function to use when de-serialising")
     }
 }

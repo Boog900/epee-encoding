@@ -54,7 +54,7 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
     let numb_o_fields: u64 = fields.len().try_into().unwrap();
 
     for field in fields {
-        let field_name = field.ident.clone().unwrap();
+        let field_name = field.ident.clone().expect("Epee only accepts named fields");
         let field_type = &field.ty;
         // If this field has a default value find it
         let default_val: Option<Expr> = field
@@ -96,6 +96,16 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 #struct_fields
                 #field_name: <#field_type as epee_encoding::EpeeObject>::Builder,
             };
+
+            count_fields = quote! {
+                #count_fields
+                // This filed has been flattened so dont count it.
+                numb_o_fields -= 1;
+                // Add the flattend fields to this one.
+                numb_o_fields += self.#field_name.number_of_fields();
+
+            };
+
         } else {
             struct_fields = quote! {
                 #struct_fields
@@ -144,17 +154,22 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                     #default_values
                     #field_name: None,
                 };
+
+                write_fields = quote! {
+                    #write_fields
+                    epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
+                };
             } else {
                 default_values = quote! {
                     #default_values
                     #field_name: Default::default(),
-                }
-            }
+                };
 
-            write_fields = quote! {
-                #write_fields
-                epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
-            };
+                write_fields = quote! {
+                    #write_fields
+                    self.#field_name.write_fields(w)?;
+                };
+            }
         };
 
         // This is what these values do:
@@ -234,12 +249,14 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
         impl EpeeObject for #struct_name {
             type Builder = #mod_name::#builder_name;
 
-            fn write<W: epee_encoding::io::Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
+            fn number_of_fields(&self) -> u64 {
                 let mut numb_o_fields: u64 = #numb_o_fields;
-
                 #count_fields
+                numb_o_fields
+            }
 
-                epee_encoding::varint::write_varint(numb_o_fields, w)?;
+
+            fn write_fields<W: epee_encoding::io::Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
 
                 #write_fields
 

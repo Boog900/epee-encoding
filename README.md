@@ -37,7 +37,6 @@ struct Test {
 ```rust
 use epee_encoding::{EpeeObject, EpeeObjectBuilder, read_epee_value, write_field, to_bytes, from_bytes};
 use epee_encoding::io::{Read, Write};
-use epee_encoding::varint::write_varint;
 
 pub struct Test {
     val: u64
@@ -68,10 +67,12 @@ impl EpeeObjectBuilder<Test> for __TestEpeeBuilder {
 
 impl EpeeObject for Test {
     type Builder = __TestEpeeBuilder;
+    
+    fn number_of_fields(&self) -> u64 {
+        1
+    }
 
-    fn write<W: Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
-       // write the number of fields
-       write_varint(1, w)?;
+    fn write_fields<W: Write>(&self, w: &mut W) -> epee_encoding::error::Result<()> {
        // write the fields
        write_field(&self.val, "val", w)
    }

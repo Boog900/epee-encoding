@@ -30,7 +30,8 @@ impl<T: EpeeObject> EpeeValue for T {
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        self.write(w)
+        write_varint(self.number_of_fields(), w)?;
+        self.write_fields(w)
     }
 }
 
@@ -133,7 +134,9 @@ impl EpeeValue for String {
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
-        w.write_all(self.as_bytes())
+        write_varint(self.len().try_into().unwrap(), w)?;
+        w.write_all(self.as_bytes()
+        )
     }
 }
 
