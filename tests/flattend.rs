@@ -1,4 +1,4 @@
-use epee_encoding::{EpeeObject, from_bytes, to_bytes};
+use epee_encoding::{from_bytes, to_bytes, EpeeObject};
 
 #[derive(EpeeObject)]
 struct Child {
@@ -19,7 +19,6 @@ struct ParentChild {
     val: u64,
     val2: Vec<u8>,
 }
-
 
 #[test]
 fn epee_flatten() {

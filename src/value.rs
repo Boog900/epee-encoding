@@ -135,8 +135,7 @@ impl EpeeValue for String {
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         write_varint(self.len().try_into().unwrap(), w)?;
-        w.write_all(self.as_bytes()
-        )
+        w.write_all(self.as_bytes())
     }
 }
 

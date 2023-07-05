@@ -105,7 +105,6 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 numb_o_fields += self.#field_name.number_of_fields();
 
             };
-
         } else {
             struct_fields = quote! {
                 #struct_fields
@@ -148,28 +147,26 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                     epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
                 }
             }
+        } else if !is_flattened {
+            default_values = quote! {
+                #default_values
+                #field_name: None,
+            };
+
+            write_fields = quote! {
+                #write_fields
+                epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
+            };
         } else {
-            if !is_flattened {
-                default_values = quote! {
-                    #default_values
-                    #field_name: None,
-                };
+            default_values = quote! {
+                #default_values
+                #field_name: Default::default(),
+            };
 
-                write_fields = quote! {
-                    #write_fields
-                    epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
-                };
-            } else {
-                default_values = quote! {
-                    #default_values
-                    #field_name: Default::default(),
-                };
-
-                write_fields = quote! {
-                    #write_fields
-                    self.#field_name.write_fields(w)?;
-                };
-            }
+            write_fields = quote! {
+                #write_fields
+                self.#field_name.write_fields(w)?;
+            };
         };
 
         // This is what these values do:

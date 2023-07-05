@@ -2,9 +2,9 @@
 ///
 /// This was taken from std-shims which is licensed under MIT and
 /// Copyright (c) 2023 Luke Parker.
+use alloc::vec;
 use alloc::vec::Vec;
 use alloc::string::String;
-use alloc::vec;
 
 use crate::{Error, Result};
 

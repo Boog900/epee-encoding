@@ -1,4 +1,4 @@
-use epee_encoding::{EpeeObject, from_bytes, to_bytes};
+use epee_encoding::{from_bytes, to_bytes, EpeeObject};
 
 #[derive(EpeeObject)]
 struct AltName {
@@ -10,15 +10,12 @@ struct AltName {
 #[derive(EpeeObject)]
 struct AltName2 {
     val2: u8,
-    d: u64
+    d: u64,
 }
 
 #[test]
 fn epee_alt_name() {
-    let val2 = AltName2 {
-        val2: 40,
-        d: 30
-    };
+    let val2 = AltName2 { val2: 40, d: 30 };
     let bytes = to_bytes(&val2).unwrap();
 
     let val: AltName = from_bytes(&bytes).unwrap();
