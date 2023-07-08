@@ -16,7 +16,7 @@ use crate::{EpeeObject, Error, InnerMarker, Marker, Result, MAX_STRING_LEN_POSSI
 pub trait EpeeValue: Sized {
     const MARKER: Marker;
 
-    fn read<R: Read>(r: &mut R) -> Result<Self>;
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self>;
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()>;
 }
@@ -25,7 +25,11 @@ pub trait EpeeValue: Sized {
 impl<T: EpeeObject> EpeeValue for T {
     const MARKER: Marker = Marker::new(InnerMarker::Object);
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if marker != &Self::MARKER {
+            return Err(Error::Format("Marker does not match expected Marker"));
+        }
+
         let mut skipped_objects = 0;
         crate::read_object(r, &mut skipped_objects)
     }
@@ -40,12 +44,19 @@ impl<T: EpeeObject> EpeeValue for T {
 impl<T: EpeeObject> EpeeValue for Vec<T> {
     const MARKER: Marker = T::MARKER.into_seq();
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if !marker.is_seq {
+            return Err(Error::Format(
+                "Marker is not sequence when a sequence was expected",
+            ));
+        }
         let len = read_varint(r)?;
+
+        let individual_marker = Marker::new(marker.inner_marker.clone());
 
         let mut res = Vec::with_capacity(len.try_into()?);
         for _ in 0..len {
-            res.push(T::read(r)?);
+            res.push(T::read(r, &individual_marker)?);
         }
         Ok(res)
     }
@@ -65,7 +76,11 @@ macro_rules! epee_numb {
         impl EpeeValue for $numb {
             const MARKER: Marker = Marker::new(InnerMarker::$marker);
 
-            fn read<R: Read>(r: &mut R) -> Result<Self> {
+            fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+                if marker != &Self::MARKER {
+                    return Err(Error::Format("Marker does not match expected Marker"));
+                }
+
                 Ok(<$numb>::from_le_bytes(read_bytes(r)?))
             }
 
@@ -90,7 +105,11 @@ epee_numb!(f64, F64);
 impl EpeeValue for bool {
     const MARKER: Marker = Marker::new(InnerMarker::Bool);
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if marker != &Self::MARKER {
+            return Err(Error::Format("Marker does not match expected Marker"));
+        }
+
         Ok(read_byte(r)? != 0)
     }
 
@@ -103,7 +122,11 @@ impl EpeeValue for bool {
 impl EpeeValue for Vec<u8> {
     const MARKER: Marker = Marker::new(InnerMarker::String);
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if marker != &Self::MARKER {
+            return Err(Error::Format("Marker does not match expected Marker"));
+        }
+
         let len = read_varint(r)?;
         if len > MAX_STRING_LEN_POSSIBLE {
             return Err(Error::Format("Byte array exceeded max length"));
@@ -120,15 +143,16 @@ impl EpeeValue for Vec<u8> {
 
 #[sealed]
 impl EpeeValue for String {
-    const MARKER: Marker = Marker {
-        inner_marker: InnerMarker::String,
-        is_seq: false,
-    };
+    const MARKER: Marker = Marker::new(InnerMarker::String);
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if marker != &Self::MARKER {
+            return Err(Error::Format("Marker does not match expected Marker"));
+        }
+
         let len = read_varint(r)?;
         if len > MAX_STRING_LEN_POSSIBLE {
-            return Err(Error::Format("Byte array exceeded max length"));
+            return Err(Error::Format("String exceeded max length"));
         }
 
         read_string(r, len.try_into()?)
@@ -144,7 +168,11 @@ impl EpeeValue for String {
 impl<const N: usize> EpeeValue for [u8; N] {
     const MARKER: Marker = Marker::new(InnerMarker::String);
 
-    fn read<R: Read>(r: &mut R) -> Result<Self> {
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if marker != &Self::MARKER {
+            return Err(Error::Format("Marker does not match expected Marker"));
+        }
+
         let len = read_varint(r)?;
         if len != N.try_into()? {
             return Err(Error::Format("Byte array has incorrect length"));
@@ -165,12 +193,20 @@ macro_rules! epee_seq {
         impl EpeeValue for Vec<$val> {
             const MARKER: Marker = <$val>::MARKER.into_seq();
 
-            fn read<R: Read>(r: &mut R) -> Result<Self> {
+            fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+                if !marker.is_seq {
+                    return Err(Error::Format(
+                        "Marker is not sequence when a sequence was expected",
+                    ));
+                }
+
                 let len = read_varint(r)?;
+
+                let individual_marker = Marker::new(marker.inner_marker.clone());
 
                 let mut res = Vec::with_capacity(len.try_into()?);
                 for _ in 0..len {
-                    res.push(<$val>::read(r)?);
+                    res.push(<$val>::read(r, &individual_marker)?);
                 }
                 Ok(res)
             }
@@ -197,6 +233,3 @@ epee_seq!(f64);
 epee_seq!(bool);
 epee_seq!(Vec<u8>);
 epee_seq!(String);
-
-#[test]
-fn t() {}

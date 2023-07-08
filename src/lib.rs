@@ -2,9 +2,7 @@
 //! Epee Encoding
 //!
 //! This library contains the Epee binary format found in Monero, unlike other
-//! crates this crate does not use serde, this is not because serde is bad but
-//! because that there is an [unfixable problem](https://github.com/monero-rs/monero-epee-bin-serde/issues/49)
-//! with using serde to encode in the Epee format.
+//! crates this crate does not use serde.
 //!
 //! example without derive:
 //! ```rust
@@ -202,11 +200,8 @@ fn read_marker<R: Read>(r: &mut R) -> Result<Marker> {
 /// Read an epee value from the stream, an epee value is the part after the key
 /// including the marker.
 pub fn read_epee_value<T: EpeeValue, R: Read>(r: &mut R) -> Result<T> {
-    if read_marker(r)? != T::MARKER {
-        return Err(Error::Format("Marker does match expected Marker"));
-    }
-
-    T::read(r)
+    let marker = read_marker(r)?;
+    T::read(r, &marker)
 }
 
 /// Write an epee value to the stream, an epee value is the part after the key
@@ -268,7 +263,7 @@ fn skip_epee_value<R: Read>(r: &mut R, skipped_objects: &mut u8) -> Result<()> {
                 read_bytes::<_, 1>(r)?;
             }
             InnerMarker::String => {
-                Vec::<u8>::read(r)?;
+                Vec::<u8>::read(r, &marker)?;
             }
             InnerMarker::Object => {
                 *skipped_objects += 1;
