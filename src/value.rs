@@ -19,6 +19,10 @@ pub trait EpeeValue: Sized {
 
     fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self>;
 
+    fn should_write(&self) -> bool {
+        true
+    }
+
     fn write<W: Write>(&self, w: &mut W) -> Result<()>;
 }
 
@@ -228,7 +232,7 @@ impl<const N: usize> EpeeValue for Vec<[u8; N]> {
 
         let mut res = Vec::with_capacity(len.try_into()?);
         for _ in 0..len {
-            res.push( <[u8; N]>::read(r, &individual_marker)?);
+            res.push(<[u8; N]>::read(r, &individual_marker)?);
         }
         Ok(res)
     }
@@ -241,7 +245,6 @@ impl<const N: usize> EpeeValue for Vec<[u8; N]> {
         Ok(())
     }
 }
-
 
 macro_rules! epee_seq {
     ($val:ty) => {
@@ -312,3 +315,27 @@ epee_seq!(f64);
 epee_seq!(bool);
 epee_seq!(Vec<u8>);
 epee_seq!(String);
+
+#[sealed]
+impl<T: EpeeValue> EpeeValue for Option<T> {
+    const MARKER: Marker = T::MARKER;
+
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        Ok(Some(T::read(r, marker)?))
+    }
+
+    fn should_write(&self) -> bool {
+        match self {
+            Some(t) => t.should_write(),
+            None => false,
+        }
+    }
+
+    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+        match self {
+            Some(t) => t.write(w)?,
+            None => panic!("Can't write an Option::None value, this should be handled elsewhere"),
+        }
+        Ok(())
+    }
+}

@@ -5,6 +5,7 @@
 - [Usage](#usage)
 - [Derive Attributes](#derive-attributes)
 - [No std](#no-std)
+- [Options](#options)
 
 ## What
 This crate implements the epee binary format found in Monero; unlike other crates, 
@@ -186,3 +187,16 @@ struct RequestT {
 ## No std
 
 This crate is no-std.
+
+## Options
+
+To have an optional field, you should wrap the type in `Option` and use the `epee_default` attribute.
+So it would look like this: 
+
+```rust
+#[derive(EpeeObject)]
+struct T {
+    #[epee_default(None)]
+    val: Option<u8>,
+}
+```

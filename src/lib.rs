@@ -173,8 +173,11 @@ fn write_field_name<W: Write>(val: &str, w: &mut W) -> Result<()> {
 
 /// Write an epee field.
 pub fn write_field<T: EpeeValue, W: Write>(val: &T, field_name: &str, w: &mut W) -> Result<()> {
-    write_field_name(field_name, w)?;
-    write_epee_value(val, w)
+    if val.should_write() {
+        write_field_name(field_name, w)?;
+        write_epee_value(val, w)?;
+    }
+    Ok(())
 }
 
 fn read_object<T: EpeeObject, R: Read>(r: &mut R, skipped_objects: &mut u8) -> Result<T> {
