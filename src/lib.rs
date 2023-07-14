@@ -80,14 +80,14 @@ use alloc::vec::Vec;
 
 pub mod error;
 pub mod io;
-mod marker;
+pub mod marker;
 mod value;
 mod varint;
 
 #[cfg(feature = "derive")]
 pub use epee_encoding_derive::EpeeObject;
 
-use error::*;
+pub use error::*;
 use io::*;
 use marker::{InnerMarker, Marker};
 use value::EpeeValue;

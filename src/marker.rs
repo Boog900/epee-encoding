@@ -3,7 +3,7 @@ use crate::Error;
 
 /// The inner marker just telling you the type.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum InnerMarker {
+pub enum InnerMarker {
     I64,
     I32,
     I16,
@@ -22,8 +22,8 @@ pub(crate) enum InnerMarker {
 /// its a sequence.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Marker {
-    pub(crate) inner_marker: InnerMarker,
-    pub(crate) is_seq: bool,
+    pub inner_marker: InnerMarker,
+    pub is_seq: bool,
 }
 
 impl Marker {
