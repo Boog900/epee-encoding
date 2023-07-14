@@ -193,7 +193,9 @@ fn read_object<T: EpeeObject, R: Read>(r: &mut R, skipped_objects: &mut u8) -> R
     object_builder.finish()
 }
 
-fn read_marker<R: Read>(r: &mut R) -> Result<Marker> {
+/// Read a marker from the [`Read`], this function should only be used for
+/// custom serialisation based on the marker otherwise just use [`read_epee_value`].
+pub fn read_marker<R: Read>(r: &mut R) -> Result<Marker> {
     Marker::try_from(read_byte(r)?)
 }
 
