@@ -9,9 +9,13 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{
     parse_macro_input, parse_quote, Data, DeriveInput, Expr, Fields, GenericParam, Generics, Lit,
+    Type,
 };
 
-#[proc_macro_derive(EpeeObject, attributes(epee_default, epee_alt_name, epee_flatten))]
+#[proc_macro_derive(
+    EpeeObject,
+    attributes(epee_default, epee_alt_name, epee_flatten, epee_try_from_into)
+)]
 pub fn derive_epee_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input tokens into a syntax tree.
     let input = parse_macro_input!(input as DeriveInput);
@@ -74,6 +78,12 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
             .iter()
             .any(|f| f.path().is_ident("epee_flatten"));
 
+        let try_from_into: Option<Type> = field
+            .attrs
+            .iter()
+            .find(|f| f.path().is_ident("epee_try_from_into"))
+            .map(|f| f.parse_args().unwrap());
+
         // Gets this objects epee name, the name its encoded with
         let epee_name = if let Some(alt) = alt_name {
             if is_flattened {
@@ -86,6 +96,10 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
         } else {
             field_name.to_string()
         };
+
+        if try_from_into.is_some() && is_flattened {
+            panic!("Cant flatten this field: {}", field_name);
+        }
 
         // This is fields part of a struct:
         // struct T {
@@ -105,12 +119,27 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 numb_o_fields += self.#field_name.number_of_fields();
 
             };
+        } else if let Some(try_from_into) = &try_from_into {
+            struct_fields = quote! {
+                #struct_fields
+                #field_name: Option<#try_from_into>,
+            };
         } else {
             struct_fields = quote! {
                 #struct_fields
                 #field_name: Option<#field_type>,
             };
         }
+
+        let inner_write_field = if let Some(try_from_into) = &try_from_into {
+            quote! {
+            epee_encoding::write_field(&Into::<#try_from_into>::into(self.#field_name.clone()), &&#epee_name, w)?;
+            }
+        } else {
+            quote! {
+            epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
+            }
+        };
 
         // `default_val`: this is the body of a default function:
         // fn default() -> Self {
@@ -144,7 +173,7 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
             write_fields = quote! {
                 #write_fields
                 if self.#field_name != #default_val {
-                    epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
+                     #inner_write_field
                 }
             }
         } else if !is_flattened {
@@ -155,7 +184,7 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
 
             write_fields = quote! {
                 #write_fields
-                epee_encoding::write_field(&self.#field_name, #epee_name, w)?;
+                #inner_write_field
             };
         } else {
             default_values = quote! {
@@ -193,14 +222,21 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 #field_name: self.#field_name.finish()?,
             };
         } else {
+            if try_from_into.is_some() {
+                object_finish = quote! {
+                    #object_finish
+                    #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?
+                                 .try_into().map_err(|_| epee_encoding::error::Error::Format("Error converting data using try_into"))?,
+                };
+            } else {
+                object_finish = quote! {
+                    #object_finish
+                    #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?,
+                };
+            }
             read_match_body = quote! {
                 #read_match_body
                 #epee_name => {self.#field_name = Some(epee_encoding::read_epee_value(r)?);},
-            };
-
-            object_finish = quote! {
-                #object_finish
-                #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?,
             };
         }
     }

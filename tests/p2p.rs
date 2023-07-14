@@ -1,11 +1,27 @@
 use epee_encoding::{from_bytes, to_bytes, EpeeObject};
 
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct SupportFlags(u32);
+
+impl From<u32> for SupportFlags {
+    fn from(value: u32) -> Self {
+        SupportFlags(value)
+    }
+}
+
+impl From<SupportFlags> for u32 {
+    fn from(value: SupportFlags) -> Self {
+        value.0
+    }
+}
+
 #[derive(EpeeObject, Eq, PartialEq, Debug)]
 pub struct BasicNodeData {
     pub my_port: u32,
     pub network_id: [u8; 16],
     pub peer_id: u64,
-    pub support_flags: u32,
+    #[epee_try_from_into(u32)]
+    pub support_flags: SupportFlags,
 }
 
 #[derive(EpeeObject, Eq, PartialEq, Debug)]
