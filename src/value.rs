@@ -2,6 +2,7 @@
 /// the different possible base epee values.
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt::Debug;
 
 use sealed::sealed;
 
@@ -59,6 +60,29 @@ impl<T: EpeeObject> EpeeValue for Vec<T> {
             res.push(T::read(r, &individual_marker)?);
         }
         Ok(res)
+    }
+
+    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+        write_varint(self.len().try_into()?, w)?;
+        for item in self.iter() {
+            item.write(w)?;
+        }
+        Ok(())
+    }
+}
+
+#[sealed]
+impl<T: EpeeObject + Debug, const N: usize> EpeeValue for [T; N] {
+    const MARKER: Marker = <T>::MARKER.into_seq();
+
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        let vec = Vec::<T>::read(r, marker)?;
+
+        if vec.len() != N {
+            return Err(Error::Format("Array has incorrect length"));
+        }
+
+        Ok(vec.try_into().unwrap())
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
@@ -187,6 +211,38 @@ impl<const N: usize> EpeeValue for [u8; N] {
     }
 }
 
+#[sealed]
+impl<const N: usize> EpeeValue for Vec<[u8; N]> {
+    const MARKER: Marker = <[u8; N]>::MARKER.into_seq();
+
+    fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+        if !marker.is_seq {
+            return Err(Error::Format(
+                "Marker is not sequence when a sequence was expected",
+            ));
+        }
+
+        let len = read_varint(r)?;
+
+        let individual_marker = Marker::new(marker.inner_marker.clone());
+
+        let mut res = Vec::with_capacity(len.try_into()?);
+        for _ in 0..len {
+            res.push( <[u8; N]>::read(r, &individual_marker)?);
+        }
+        Ok(res)
+    }
+
+    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+        write_varint(self.len().try_into()?, w)?;
+        for item in self.iter() {
+            item.write(w)?;
+        }
+        Ok(())
+    }
+}
+
+
 macro_rules! epee_seq {
     ($val:ty) => {
         #[sealed]
@@ -209,6 +265,29 @@ macro_rules! epee_seq {
                     res.push(<$val>::read(r, &individual_marker)?);
                 }
                 Ok(res)
+            }
+
+            fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+                write_varint(self.len().try_into()?, w)?;
+                for item in self.iter() {
+                    item.write(w)?;
+                }
+                Ok(())
+            }
+        }
+
+        #[sealed]
+        impl<const N: usize> EpeeValue for [$val; N] {
+            const MARKER: Marker = <$val>::MARKER.into_seq();
+
+            fn read<R: Read>(r: &mut R, marker: &Marker) -> Result<Self> {
+                let vec = Vec::<$val>::read(r, marker)?;
+
+                if vec.len() != N {
+                    return Err(Error::Format("Array has incorrect length"));
+                }
+
+                Ok(vec.try_into().unwrap())
             }
 
             fn write<W: Write>(&self, w: &mut W) -> Result<()> {

@@ -89,8 +89,8 @@ pub use epee_encoding_derive::EpeeObject;
 
 pub use error::*;
 use io::*;
-use marker::{InnerMarker, Marker};
-use value::EpeeValue;
+pub use marker::{InnerMarker, Marker};
+pub use value::EpeeValue;
 use varint::*;
 
 /// Header that needs to be at the beginning of every binary blob that follows
