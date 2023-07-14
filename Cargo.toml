@@ -21,7 +21,7 @@ derive = ["dep:epee-encoding-derive"]
 
 [dependencies]
 sealed = "0.5.0"
-epee-encoding-derive = {path="epee-encoding-derive", optional=true}
+epee-encoding-derive = {path = "epee-encoding-derive", optional=true}
 
 [dev-dependencies]
 hex = "0.4"

@@ -133,11 +133,11 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
 
         let inner_write_field = if let Some(try_from_into) = &try_from_into {
             quote! {
-            epee_encoding::write_field(&Into::<#try_from_into>::into(self.#field_name.clone()), &&#epee_name, w)?;
+                epee_encoding::write_field(&Into::<#try_from_into>::into(self.#field_name.clone()), &#epee_name, w)?;
             }
         } else {
             quote! {
-            epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
+                epee_encoding::write_field(&self.#field_name, &#epee_name, w)?;
             }
         };
 
@@ -163,17 +163,32 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 #field_name: Some(#default_val),
             };
 
-            count_fields = quote! {
-                #count_fields
-                if self.#field_name == #default_val {
-                    numb_o_fields -= 1;
+            if try_from_into.is_some() {
+                count_fields = quote! {
+                    #count_fields
+                    if self.#field_name == #default_val.into() {
+                        numb_o_fields -= 1;
+                    };
                 };
-            };
+                write_fields = quote! {
+                    #write_fields
+                    if self.#field_name != #default_val.into() {
+                         #inner_write_field
+                    }
+                }
+            } else {
+                count_fields = quote! {
+                    #count_fields
+                    if self.#field_name == #default_val {
+                        numb_o_fields -= 1;
+                    };
+                };
 
-            write_fields = quote! {
-                #write_fields
-                if self.#field_name != #default_val {
-                     #inner_write_field
+                write_fields = quote! {
+                    #write_fields
+                    if self.#field_name != #default_val {
+                         #inner_write_field
+                    }
                 }
             }
         } else if !is_flattened {
