@@ -23,6 +23,15 @@ pub trait EpeeValue: Sized {
         true
     }
 
+    /// This is different than default field values and instead is the default
+    /// value of a whole type.
+    ///
+    /// For example a `Vec` has a default value of a zero length vec as when a
+    /// sequence has no entries it is not encoded.
+    fn epee_default_value() -> Option<Self> {
+        None
+    }
+
     fn write<W: Write>(&self, w: &mut W) -> Result<()>;
 }
 
@@ -64,6 +73,14 @@ impl<T: EpeeObject> EpeeValue for Vec<T> {
             res.push(T::read(r, &individual_marker)?);
         }
         Ok(res)
+    }
+
+    fn should_write(&self) -> bool {
+        !self.is_empty()
+    }
+
+    fn epee_default_value() -> Option<Self> {
+        Some(Vec::new())
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
@@ -237,6 +254,14 @@ impl<const N: usize> EpeeValue for Vec<[u8; N]> {
         Ok(res)
     }
 
+    fn should_write(&self) -> bool {
+        !self.is_empty()
+    }
+
+    fn epee_default_value() -> Option<Self> {
+        Some(Vec::new())
+    }
+
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         write_varint(self.len().try_into()?, w)?;
         for item in self.iter() {
@@ -268,6 +293,14 @@ macro_rules! epee_seq {
                     res.push(<$val>::read(r, &individual_marker)?);
                 }
                 Ok(res)
+            }
+
+            fn should_write(&self) -> bool {
+                !self.is_empty()
+            }
+
+            fn epee_default_value() -> Option<Self> {
+                Some(Vec::new())
             }
 
             fn write<W: Write>(&self, w: &mut W) -> Result<()> {
@@ -329,6 +362,10 @@ impl<T: EpeeValue> EpeeValue for Option<T> {
             Some(t) => t.should_write(),
             None => false,
         }
+    }
+
+    fn epee_default_value() -> Option<Self> {
+        Some(None)
     }
 
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
