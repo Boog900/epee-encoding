@@ -2,7 +2,6 @@ use epee_encoding::{from_bytes, to_bytes, EpeeObject};
 
 #[derive(EpeeObject)]
 struct T {
-    #[epee_default(None)]
     val: Option<u8>,
 }
 

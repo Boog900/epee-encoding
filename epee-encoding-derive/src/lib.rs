@@ -192,12 +192,21 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
                 }
             }
         } else if !is_flattened {
-            count_fields = quote! {
-                #count_fields
-                if !epee_encoding::EpeeValue::should_write(&self.#field_name) {
-                    numb_o_fields -= 1;
+            if let Some(try_from_into) = &try_from_into {
+                count_fields = quote! {
+                    #count_fields
+                    if !epee_encoding::EpeeValue::should_write(&Into::<#try_from_into>::into(self.#field_name.clone())) {
+                        numb_o_fields -= 1;
+                    };
                 };
-            };
+            } else {
+                count_fields = quote! {
+                    #count_fields
+                    if !epee_encoding::EpeeValue::should_write(&self.#field_name) {
+                        numb_o_fields -= 1;
+                    };
+                };
+            }
             default_values = quote! {
                 #default_values
                 #field_name: epee_encoding::EpeeValue::epee_default_value(),

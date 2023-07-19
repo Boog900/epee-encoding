@@ -21,7 +21,6 @@ pub struct BasicNodeData {
     pub network_id: [u8; 16],
     pub peer_id: u64,
     #[epee_try_from_into(u32)]
-    #[epee_default(0)]
     pub support_flags: SupportFlags,
 }
 
