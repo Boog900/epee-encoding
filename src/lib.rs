@@ -100,6 +100,8 @@ const HEADER: &[u8] = b"\x01\x11\x01\x01\x01\x01\x02\x01\x01";
 const MAX_STRING_LEN_POSSIBLE: u64 = 2000000000;
 /// The maximum depth of skipped objects.
 const MAX_DEPTH_OF_SKIPPED_OBJECTS: u8 = 20;
+/// The maximum number of fields in an object.
+const MAX_NUM_FIELDS: u64 = 1000;
 
 /// A trait for an object that can build a type `T` from the epee format.
 pub trait EpeeObjectBuilder<T>: Default + Sized {
@@ -184,7 +186,12 @@ fn read_object<T: EpeeObject, R: Read>(r: &mut R, skipped_objects: &mut u8) -> R
     let mut object_builder = T::Builder::default();
 
     let number_o_field = read_varint(r)?;
-    // TODO: Size check numb of fields?
+
+    if number_o_field > MAX_NUM_FIELDS {
+        return Err(Error::Format(
+            "Data has object with more fields than the maximum allowed",
+        ));
+    }
 
     for _ in 0..number_o_field {
         let field_name = read_field_name(r)?;

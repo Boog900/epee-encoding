@@ -67,7 +67,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose --no--default-features
+          args: --verbose --no-default-features
 
   test:
     name: Test

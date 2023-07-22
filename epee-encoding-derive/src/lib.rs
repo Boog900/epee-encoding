@@ -122,12 +122,12 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
         } else if let Some(try_from_into) = &try_from_into {
             struct_fields = quote! {
                 #struct_fields
-                #field_name: Option<#try_from_into>,
+                #field_name: (Option<#try_from_into>, bool),
             };
         } else {
             struct_fields = quote! {
                 #struct_fields
-                #field_name: Option<#field_type>,
+                #field_name: (Option<#field_type>, bool),
             };
         }
 
@@ -160,7 +160,7 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
 
             default_values = quote! {
                 #default_values
-                #field_name: Some(#default_val),
+                #field_name: (Some(#default_val), false),
             };
 
             if try_from_into.is_some() {
@@ -209,7 +209,7 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
             }
             default_values = quote! {
                 #default_values
-                #field_name: epee_encoding::EpeeValue::epee_default_value(),
+                #field_name: (epee_encoding::EpeeValue::epee_default_value(), false),
             };
 
             write_fields = quote! {
@@ -255,18 +255,24 @@ fn build(fields: &Fields, struct_name: &Ident) -> TokenStream {
             if try_from_into.is_some() {
                 object_finish = quote! {
                     #object_finish
-                    #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?
+                    #field_name: self.#field_name.0.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?
                                  .try_into().map_err(|_| epee_encoding::error::Error::Format("Error converting data using try_into"))?,
                 };
             } else {
                 object_finish = quote! {
                     #object_finish
-                    #field_name: self.#field_name.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?,
+                    #field_name: self.#field_name.0.ok_or_else(|| epee_encoding::error::Error::Format("Required field was not found!"))?,
                 };
             }
             read_match_body = quote! {
                 #read_match_body
-                #epee_name => {self.#field_name = Some(epee_encoding::read_epee_value(r)?);},
+                #epee_name => {
+                    self.#field_name.0.replace(epee_encoding::read_epee_value(r)?);
+                    if self.#field_name.1 {
+                        return Err(epee_encoding::error::Error::Format("Double key in data!"))
+                    }
+                    self.#field_name.1 = true;
+                },
             };
         }
     }
