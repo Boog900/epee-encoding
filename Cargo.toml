@@ -5,7 +5,7 @@ members = [
 
 [package]
 name = "epee-encoding"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 authors = ["Boog900"]
@@ -22,7 +22,7 @@ derive = ["dep:epee-encoding-derive"]
 
 [dependencies]
 sealed = "0.5.0"
-epee-encoding-derive = {path = "epee-encoding-derive", version = "0.3", optional=true}
+epee-encoding-derive = {path = "epee-encoding-derive", version = "0.4", optional=true}
 thiserror = {version = "1", optional = true}
 
 [dev-dependencies]
