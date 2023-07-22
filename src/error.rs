@@ -3,9 +3,13 @@ use core::num::TryFromIntError;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Error {
+    #[cfg_attr(feature = "std", error("IO error: {0}"))]
     IO(&'static str),
+    #[cfg_attr(feature = "std", error("Format error: {0}"))]
     Format(&'static str),
+    #[cfg_attr(feature = "std", error("Value error: {0}"))]
     Value(&'static str),
 }
 
